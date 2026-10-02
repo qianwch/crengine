@@ -31,6 +31,7 @@ set(CRE_SRCS
     crengine/src/docxfmt.cpp
     crengine/src/drawutil.cpp
     crengine/src/epubfmt.cpp
+    crengine/src/mobifmt.cpp
     crengine/src/fb3fmt.cpp
     crengine/src/hist.cpp
     crengine/src/hyphman.cpp
@@ -269,7 +270,11 @@ endif()
 
 # libcrengine {{{
 
+find_path(MOBI_INCLUDE_DIR mobi.h REQUIRED)
+find_library(MOBI_LIBRARY mobi REQUIRED)
+list(APPEND CRE_LIBS ${MOBI_LIBRARY})
 add_library(crengine)
+target_include_directories(crengine PRIVATE ${MOBI_INCLUDE_DIR})
 target_sources(crengine PRIVATE ${CRE_SRCS})
 # Make sure we get full `constexpr` support.
 target_compile_features(crengine PRIVATE cxx_std_17)

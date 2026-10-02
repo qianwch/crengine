@@ -26,6 +26,7 @@
 #include "../include/crtxtenc.h"
 #include "../include/crtrace.h"
 #include "../include/epubfmt.h"
+#include "../include/mobifmt.h"
 #include "../include/chmfmt.h"
 #include "../include/wordfmt.h"
 #include "../include/pdbfmt.h"
@@ -4462,6 +4463,29 @@ bool LVDocView::LoadDocument(LVStreamRef stream, bool metadataOnly) {
 #if (USE_ZLIB==1)
 
         doc_format_t pdbFormat = doc_format_none;
+        if (DetectMobi8Format(m_stream)) {
+            CRLog::info("AZW3/KF8 native format detected");
+            createEmptyDocument();
+            m_doc->setProps(m_doc_props);
+            setRenderProps(0, 0);
+            setDocFormat(doc_format_azw3);
+            if (m_callback) m_callback->OnLoadFileFormatDetected(doc_format_azw3);
+            updateDocStyleSheet();
+            if (!ImportMobi8Document(m_stream, m_doc, m_callback, this, metadataOnly,
+                    fb2_elem_table, fb2_attr_table, fb2_ns_table)) {
+                setDocFormat(doc_format_none);
+                if (m_callback) m_callback->OnLoadFileError(cs32("Cannot read AZW3/KF8 document"));
+                return false;
+            }
+            m_container = m_doc->getContainer();
+            m_arc = m_container;
+            m_doc_props = m_doc->getProps();
+            setRenderProps(0, 0);
+            REQUEST_RENDER("loadDocument")
+            if (m_callback) m_callback->OnLoadFileEnd();
+            return true;
+        }
+
         if ( DetectPDBFormat(m_stream, pdbFormat) ) {
             // PDB
             CRLog::info("PDB format detected");
@@ -4899,6 +4923,8 @@ const lChar32 * getDocFormatName(doc_format_t fmt) {
 		return U"Rich text (RTF)";
 	case doc_format_epub:
 		return U"EPUB";
+    case doc_format_azw3:
+        return U"AZW3/KF8";
 	case doc_format_html:
 		return U"HTML";
 	case doc_format_txt_bookmark:

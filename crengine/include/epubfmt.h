@@ -9,6 +9,8 @@ bool DetectEpubFormat( LVStreamRef stream );
 bool ImportEpubDocument( LVStreamRef stream, ldomDocument * doc, LVDocViewCallback * progressCallback,
     CacheLoadingCallback * formatCallback, bool metadataOnly = false,
     const elem_def_t * node_scheme=NULL, const attr_def_t * attr_scheme=NULL, const ns_def_t * ns_scheme=NULL);
+bool ImportPublicationDocument(LVContainerRef arc, lString32 rootfilePath, ldomDocument *doc, LVDocViewCallback *progressCallback,
+    CacheLoadingCallback *formatCallback, bool metadataOnly, const elem_def_t *node_scheme, const attr_def_t *attr_scheme, const ns_def_t *ns_scheme);
 lString32 EpubGetRootFilePath( LVContainerRef m_arc );
 LVStreamRef GetEpubCoverpage(LVContainerRef arc);
 

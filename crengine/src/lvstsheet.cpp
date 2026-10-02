@@ -3862,7 +3862,8 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
                             match = (doc->getRenderBlockRenderingFlags() == BLOCK_RENDERING_FULL_FEATURED) != invert;
                         }
                         else if ( name == cr_only_if_epub_document ) {
-                            match = doc->getProps()->getIntDef(DOC_PROP_FILE_FORMAT_ID, doc_format_none) == doc_format_epub;
+                            int format = doc->getProps()->getIntDef(DOC_PROP_FILE_FORMAT_ID, doc_format_none);
+                            match = format == doc_format_epub || format == doc_format_azw3;
                             if (invert) {
                                 match = !match;
                             }
@@ -7651,7 +7652,7 @@ bool LVCssSelector::parse( const char * &str, lxmlDocBase * doc, bool useragent_
                 // "cached rendering is invalid (style hash mismatch): doing full rendering"
             if ( _id == el_html ) {
                 int doc_format = doc->getProps()->getIntDef(DOC_PROP_FILE_FORMAT_ID, doc_format_none);
-                if ( doc_format == doc_format_epub || doc_format == doc_format_chm ) {
+                if ( doc_format == doc_format_epub || doc_format == doc_format_azw3 || doc_format == doc_format_chm ) {
                     // When building DOM from EPUB or CHM files, the <html> element is skipped
                     // and its <body> child is wrapped in a <DocFragment> element (so, taking
                     // the place of the skipped <html>).

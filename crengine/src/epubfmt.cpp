@@ -1054,6 +1054,16 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
     if ( rootfilePath.empty() )
         return false;
 
+    return ImportPublicationDocument(arc, rootfilePath, m_doc, progressCallback, formatCallback,
+        metadataOnly, node_scheme, attr_scheme, ns_scheme);
+}
+
+// Shared XHTML publication importer. Native KF8 uses a virtual resource container,
+// while EPUB supplies its ZIP container; neither requires format serialization.
+bool ImportPublicationDocument(LVContainerRef arc, lString32 rootfilePath, ldomDocument *m_doc,
+    LVDocViewCallback *progressCallback, CacheLoadingCallback *formatCallback, bool metadataOnly,
+    const elem_def_t *node_scheme, const attr_def_t *attr_scheme, const ns_def_t *ns_scheme)
+{
     // Check for any encrypted/obfuscated resources
     EncryptedDataContainer * decryptor = new EncryptedDataContainer(arc);
     if (decryptor->open()) {
