@@ -24,6 +24,7 @@ class MobiResourceContainer : public LVContainer {
     LVPtrVector<MobiPartItem> _binaryItems;
     bool _attempted = false;
     bool _ready = false;
+    int _previewFragments = 0;
     bool _binaryAttempted = false;
     bool _binaryReady = false;
 
@@ -48,7 +49,9 @@ class MobiResourceContainer : public LVContainer {
         _attempted = true;
         _raw = mobi_init_rawml(_mobi);
         if (!_raw) return false;
-        MOBI_RET result = mobi_parse_rawml(_raw, _mobi);
+        MOBI_RET result = _previewFragments > 0
+            ? mobi_parse_rawml_preview(_raw, _mobi, (size_t)_previewFragments)
+            : mobi_parse_rawml(_raw, _mobi);
         if (result != MOBI_SUCCESS) {
             CRLog::error("KF8: parsing failed (%d)", result);
             return false;
@@ -79,6 +82,7 @@ class MobiResourceContainer : public LVContainer {
     }
 public:
     MobiResourceContainer(MOBIData *mobi) : _mobi(mobi) {}
+    void setPreviewFragments(int count) { _previewFragments = count; }
     ~MobiResourceContainer() {
         mobi_free_rawml(_binary);
         mobi_free_rawml(_raw);
@@ -148,12 +152,14 @@ bool ImportMobi8Document(LVStreamRef stream, ldomDocument *doc, LVDocViewCallbac
         mobi_free(mobi);
         return false;
     }
-    LVContainerRef resources(new MobiResourceContainer(mobi));
+    MobiResourceContainer *container = new MobiResourceContainer(mobi);
+    LVContainerRef resources(container);
     doc->setContainer(resources);
     int previewFragments = doc->getProps()->getIntDef("azw3.preview.fragments", 0);
     // Restore the DOM and page layout first. Most text-only cache hits need no
     // KF8 reconstruction at all; fonts and images trigger it lazily if accessed.
     if (!metadataOnly && doc->openFromCache(cache, progress)) return true;
+    container->setPreviewFragments(metadataOnly ? 0 : previewFragments);
     doc->getProps()->setBool("azw3.preview.active", !metadataOnly && previewFragments > 0);
     doc->getProps()->setInt("azw3.preview.fragments", previewFragments);
     doc->setContainer(resources);
