@@ -1617,6 +1617,8 @@ bool ImportPublicationDocument(LVContainerRef arc, lString32 rootfilePath, ldomD
         }
     }
     int lastProgressPercent = 5;
+    const int previewFragments = m_doc->getProps()->getBoolDef("azw3.preview.active", false)
+        ? m_doc->getProps()->getIntDef("azw3.preview.fragments", 0) : 0;
     for ( size_t i=0; i<spineItemsNb; i++ ) {
         if ( progressCallback ) {
             int percent = 5 + 95 * i / spineItemsNb;
@@ -1639,6 +1641,16 @@ bool ImportPublicationDocument(LVContainerRef arc, lString32 rootfilePath, ldomD
                 appender.setNonLinearFlag(spineItems[i]->nonlinear);
                 appender.setFragmentType(); // unset
                 CRLog::debug("Checking fragment: %s", LCSTR(name));
+                if (previewFragments > 0 && i >= (size_t)previewFragments) {
+                    // Keep every fragment index stable for xpointers, but avoid
+                    // parsing the remaining text before the first readable page.
+                    char empty[] = "<html><body></body></html>";
+                    LVStreamRef placeholder = LVCreateMemoryStream(
+                        empty, (int)strlen(empty), true);
+                    LVHTMLParser parser(placeholder, &appender);
+                    parser.Parse();
+                    continue;
+                }
                 LVStreamRef stream = m_arc->OpenStream(name.c_str(), LVOM_READ);
                 if ( !stream.isNull() ) {
                     LVHTMLParser parser(stream, &appender);

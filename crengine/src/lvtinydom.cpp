@@ -2522,6 +2522,7 @@ bool tinyNodeCollection::setInterlineScaleFactor(int value) {
 #if BUILD_LITE!=1
 bool tinyNodeCollection::openCacheFile()
 {
+    if (getProps()->getBoolDef("azw3.preview.active", false)) return false;
     if ( _cacheFile )
         return true;
     CacheFile * f = new CacheFile(_DOMVersionRequested);
@@ -2572,6 +2573,9 @@ bool tinyNodeCollection::swapToCacheIfNecessary()
 
 bool tinyNodeCollection::createCacheFile()
 {
+    // A preview must never overwrite the complete document's cache, including
+    // cache allocation triggered internally by storage pressure.
+    if (getProps()->getBoolDef("azw3.preview.active", false)) return false;
     if ( _cacheFile )
         return true;
     CacheFile * f = new CacheFile(_DOMVersionRequested);
@@ -18685,6 +18689,7 @@ bool tinyNodeCollection::updateLoadedStyles( bool enabled )
 /// swaps to cache file or saves changes, limited by time interval
 ContinuousOperationResult ldomDocument::swapToCache( CRTimerUtil & maxTime )
 {
+    if (getProps()->getBoolDef("azw3.preview.active", false)) return CR_DONE;
     CRLog::trace("ldomDocument::swapToCache entered");
     if ( _maperror )
         return CR_ERROR;

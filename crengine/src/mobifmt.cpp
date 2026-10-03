@@ -150,9 +150,12 @@ bool ImportMobi8Document(LVStreamRef stream, ldomDocument *doc, LVDocViewCallbac
     }
     LVContainerRef resources(new MobiResourceContainer(mobi));
     doc->setContainer(resources);
+    int previewFragments = doc->getProps()->getIntDef("azw3.preview.fragments", 0);
     // Restore the DOM and page layout first. Most text-only cache hits need no
     // KF8 reconstruction at all; fonts and images trigger it lazily if accessed.
     if (!metadataOnly && doc->openFromCache(cache, progress)) return true;
+    doc->getProps()->setBool("azw3.preview.active", !metadataOnly && previewFragments > 0);
+    doc->getProps()->setInt("azw3.preview.fragments", previewFragments);
     doc->setContainer(resources);
     return ImportPublicationDocument(resources, cs32("content.opf"), doc, progress, cache,
         metadataOnly, elements, attributes, namespaces);

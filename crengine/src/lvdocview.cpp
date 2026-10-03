@@ -4467,6 +4467,8 @@ bool LVDocView::LoadDocument(LVStreamRef stream, bool metadataOnly) {
             CRLog::info("AZW3/KF8 native format detected");
             createEmptyDocument();
             m_doc->setProps(m_doc_props);
+            m_doc_props->setInt("azw3.preview.fragments",
+                m_props->getIntDef("crengine.azw3.preview.fragments", 0));
             setRenderProps(0, 0);
             setDocFormat(doc_format_azw3);
             if (m_callback) m_callback->OnLoadFileFormatDetected(doc_format_azw3);
