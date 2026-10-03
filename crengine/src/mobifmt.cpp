@@ -18,39 +18,18 @@ public:
 
 class MobiResourceContainer : public LVContainer {
     MOBIData *_mobi;
-    MOBIRawml *_raw;
+    MOBIRawml *_raw = NULL;
+    MOBIRawml *_binary = NULL;
     LVPtrVector<MobiPartItem> _items;
-public:
-    MobiResourceContainer(MOBIData *mobi, MOBIRawml *raw) : _mobi(mobi), _raw(raw) {}
-    ~MobiResourceContainer() {
-        mobi_free_rawml(_raw);
-        mobi_free(_mobi);
-    }
-    LVContainer *GetParentContainer() { return NULL; }
-    int GetObjectCount() const { return _items.length(); }
-    lverror_t GetSize(lvsize_t *size) { *size = _items.length(); return LVERR_OK; }
-    const LVContainerItemInfo *GetObjectInfo(int index) {
-        return index >= 0 && index < _items.length() ? _items[index] : NULL;
-    }
-    const LVContainerItemInfo *GetObjectInfo(lString32 name) {
-        for (int i = 0; i < _items.length(); i++)
-            if (name == _items[i]->GetName()) return _items[i];
-        return NULL;
-    }
-    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) {
-        if (mode != LVOM_READ) return LVStreamRef();
-        for (int i = 0; i < _items.length(); i++) {
-            if (lString32(name) == _items[i]->GetName()) {
-                MOBIPart *part = _items[i]->part;
-                LVStreamRef stream = LVCreateMemoryStream(part->data, (int)part->size, true);
-                stream->SetName(name);
-                return stream;
-            }
-        }
-        return LVStreamRef();
-    }
-    bool addParts(MOBIPart *part, const char *prefix, bool skipFirst) {
-        if (skipFirst && part) part = part->next; // main flow is split into markup
+    LVPtrVector<MobiPartItem> _binaryItems;
+    bool _attempted = false;
+    bool _ready = false;
+    bool _binaryAttempted = false;
+    bool _binaryReady = false;
+
+    bool addParts(MOBIPart *part, const char *prefix, bool skipFirst,
+            LVPtrVector<MobiPartItem> &items) {
+        if (skipFirst && part) part = part->next;
         for (; part; part = part->next) {
             if (!part->size) continue;
             if (!part->data || part->size > INT_MAX) return false;
@@ -60,9 +39,79 @@ public:
                 snprintf(name, sizeof(name), "content.opf");
             else
                 snprintf(name, sizeof(name), "%s%05zu.%s", prefix, part->uid, meta.extension);
-            _items.add(new MobiPartItem(Utf8ToUnicode(name), part));
+            items.add(new MobiPartItem(Utf8ToUnicode(name), part));
         }
         return true;
+    }
+    bool ensureParts() {
+        if (_attempted) return _ready;
+        _attempted = true;
+        _raw = mobi_init_rawml(_mobi);
+        if (!_raw) return false;
+        MOBI_RET result = mobi_parse_rawml(_raw, _mobi);
+        if (result != MOBI_SUCCESS) {
+            CRLog::error("KF8: parsing failed (%d)", result);
+            return false;
+        }
+        _ready = addParts(_raw->markup, "part", false, _items)
+            && addParts(_raw->flow, "flow", true, _items)
+            && addParts(_raw->resources, "resource", false, _items);
+        return _ready;
+    }
+    bool ensureBinaryResources() {
+        if (_binaryAttempted) return _binaryReady;
+        _binaryAttempted = true;
+        _binary = mobi_init_rawml(_mobi);
+        if (!_binary || mobi_parse_resources(_binary, _mobi) != MOBI_SUCCESS) return false;
+        _binaryReady = addParts(_binary->resources, "resource", false, _binaryItems);
+        return _binaryReady;
+    }
+    LVStreamRef openPartStream(LVPtrVector<MobiPartItem> &items, const lChar32 *name) {
+        for (int i = 0; i < items.length(); i++) {
+            if (lString32(name) == items[i]->GetName()) {
+                MOBIPart *part = items[i]->part;
+                LVStreamRef stream = LVCreateMemoryStream(part->data, (int)part->size, true);
+                stream->SetName(name);
+                return stream;
+            }
+        }
+        return LVStreamRef();
+    }
+public:
+    MobiResourceContainer(MOBIData *mobi) : _mobi(mobi) {}
+    ~MobiResourceContainer() {
+        mobi_free_rawml(_binary);
+        mobi_free_rawml(_raw);
+        mobi_free(_mobi);
+    }
+    LVContainer *GetParentContainer() { return NULL; }
+    int GetObjectCount() const {
+        return const_cast<MobiResourceContainer *>(this)->ensureParts() ? _items.length() : 0;
+    }
+    lverror_t GetSize(lvsize_t *size) {
+        if (!ensureParts()) return LVERR_FAIL;
+        *size = _items.length(); return LVERR_OK;
+    }
+    const LVContainerItemInfo *GetObjectInfo(int index) {
+        if (!ensureParts()) return NULL;
+        return index >= 0 && index < _items.length() ? _items[index] : NULL;
+    }
+    const LVContainerItemInfo *GetObjectInfo(lString32 name) {
+        if (!ensureParts()) return NULL;
+        for (int i = 0; i < _items.length(); i++)
+            if (name == _items[i]->GetName()) return _items[i];
+        return NULL;
+    }
+    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) {
+        if (mode != LVOM_READ) return LVStreamRef();
+        // Cached layout still asks for cover images and embedded fonts. These
+        // records can be decoded without inflating the entire book text.
+        if (!_attempted && lString32(name).startsWith(U"resource") && ensureBinaryResources()) {
+            LVStreamRef stream = openPartStream(_binaryItems, name);
+            if (!stream.isNull()) return stream;
+        }
+        if (!ensureParts()) return LVStreamRef();
+        return openPartStream(_items, name);
     }
 };
 
@@ -99,21 +148,12 @@ bool ImportMobi8Document(LVStreamRef stream, ldomDocument *doc, LVDocViewCallbac
         mobi_free(mobi);
         return false;
     }
-    MOBIRawml *raw = mobi_init_rawml(mobi);
-    if (!raw) { mobi_free(mobi); return false; }
-    result = mobi_parse_rawml(raw, mobi);
-    if (result != MOBI_SUCCESS) {
-        CRLog::error("KF8: parsing failed (%d)", result);
-        mobi_free_rawml(raw);
-        mobi_free(mobi);
-        return false;
-    }
-    MobiResourceContainer *container = new MobiResourceContainer(mobi, raw);
-    LVContainerRef resources(container);
-    if (!container->addParts(raw->markup, "part", false)
-        || !container->addParts(raw->flow, "flow", true)
-        || !container->addParts(raw->resources, "resource", false)) return false;
-    CRLog::info("KF8: native import of %d resource parts", container->GetObjectCount());
+    LVContainerRef resources(new MobiResourceContainer(mobi));
+    doc->setContainer(resources);
+    // Restore the DOM and page layout first. Most text-only cache hits need no
+    // KF8 reconstruction at all; fonts and images trigger it lazily if accessed.
+    if (!metadataOnly && doc->openFromCache(cache, progress)) return true;
+    doc->setContainer(resources);
     return ImportPublicationDocument(resources, cs32("content.opf"), doc, progress, cache,
         metadataOnly, elements, attributes, namespaces);
 }
